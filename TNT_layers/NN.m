@@ -24,6 +24,7 @@ classdef NN < handle
             has_label        = ~isempty(train_label);
             lr_weight        = Util.Initialize(opt,'lr_weight',1);
             init_epoch       = Util.Initialize(opt,'init_epoch',1);
+            %hold_gradient    = Util.Initialize(opt,'hold_gradient',1);
 
                       
             batch_size = floor(size(train_data, 2)/ batch_num);
@@ -120,6 +121,27 @@ classdef NN < handle
             %nn.layers{nn.layer_num}.Backward(y);
                 %nn.layers{nn.layer_num}.UpdatePIOnly(y);            
             nn.layers{nn.layer_num}.UpdatePIOnly(y,1/100/length(unique(y)));                        
+        end
+        
+        %% For Visualization and Record
+        function ShowProjectedData(nn, ith_layer, gt_y, marker)
+            if(~exist('marker'))
+                marker = 'o';
+            end
+            yid = nn.layers{nn.layer_num}.LabelMapping(gt_y); %class->class_id
+                           
+            %scatter(x,y,marker size,color, marker type, [filled]);
+            %defalut colormap: hsv,  
+            cmap = hsv;
+            interval = floor(64/length(unique(yid)));
+            if(ismember(marker,'*+x.'))
+                scatter(nn.layers{ith_layer}.out(1,:),nn.layers{ith_layer}.out(2,:),30,  cmap(interval*yid,:),marker);
+            else
+                scatter(nn.layers{ith_layer}.out(1,:),nn.layers{ith_layer}.out(2,:),30,  cmap(interval*yid,:),marker, 'filled');
+            end
+        end    
+        function projected_data = GetProjectedData(nn,ith_layer)
+            projected_data = nn.layers{ith_layer}.out;            
         end
    end
    

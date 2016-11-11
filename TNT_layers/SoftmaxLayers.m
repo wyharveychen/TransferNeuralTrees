@@ -1,8 +1,8 @@
 classdef SoftmaxLayers <handle
     properties          
         %cache parameter of updating
-        prob;
-        y_embd;
+        out;
+        yid;
         
         label_list;
         label_map;
@@ -20,11 +20,11 @@ classdef SoftmaxLayers <handle
         end
         function out = Forward(layer,in) %in: input, out: layer output 
              out = layer.SoftMax(in);
-             layer.prob = out;
+             layer.out = out;
         end
         function prev_derr = Backward(layer,y_gt) %derr: derr/ds
-             layer.y_embd = layer.LabelEmbedding(y_gt);
-             prev_derr = (layer.prob - layer.y_embd);             
+             layer.yid = layer.LabelEmbedding(y_gt);
+             prev_derr = (layer.prob - layer.yid);             
         end
         function Update(layer)               
         end
@@ -34,15 +34,15 @@ classdef SoftmaxLayers <handle
              out = full(sparse(yid,1:length(yid),ones(length(yid),1)));
         end
         function cost = TotalError(layer)                                   
-            cost = 0.5*mean(sum((layer.y_embd - layer.prob).^2,1));
+            cost = 0.5*mean(sum((layer.yid - layer.out).^2,1));
         end
         function predicted_label = Predict(layer)
-            [~,max_id] = max(layer.prob,[],1);
+            [~,max_id] = max(layer.out,[],1);
             predicted_label = layer.label_list(max_id);
         end
         function ClearCache(layer)
-            layer.prob = [];
-            layer.y_embd = [];
+            layer.out = [];
+            layer.yid = [];
         end
 
     end

@@ -104,25 +104,51 @@ classdef NDFLayers < matlab.mixin.Copyable
         end
         %}
         %% For Backward
-        function prev_derr_merged = Backward(layer,gt_y) %derr: derr/ds                          
+        function prev_derr_merged = Backward(layer,gt_y) %derr: derr/ds               
+            layer.grad = []; %clear cache            
+            %l_id = (gt_y ~=  inf);
             if(~isempty(gt_y))
                 %prediction loss
+                %layer.yid  =  layer.LabelMalayer.yid  =  layer.LabelMapping(gt_y(l_id));pping(gt_y(l_id));
                 layer.yid  =  layer.LabelMapping(gt_y);
-                yid_expand  = cell(layer.tree_num,1);
-                yid_expand(:) = {layer.yid};
-                layer.P    =  cellfun(@NDFLayers.PILayerDiff       , layer.mu  ,yid_expand , layer.pi      ,'UniformOutput',0);
-                layer.derr =  cellfun(@NDFLayers.RouteLayerDiff    , layer.d   ,layer.P    , layer.route   ,'UniformOutput',0);
-                layer.prev_derr = cellfun(@NDFLayers.ThetaLayerDiff, layer.derr,             layer.theta   ,'UniformOutput',0);
+                
+                %yid_expand  = cell(layer.tree_num,1);
+                %yid_expand(:) = {layer.yid};
+                
+%                 l_in = Util.CellSubset(layer.in,l_id);
+%                 l_d  = Util.CellSubset(layer.d,l_id);
+%                 l_mu = Util.CellSubset(layer.mu,l_id);
+%                 l_p  = Util.CellSubset(layer.p,l_id);
+                
+                %sub_PILayerDiff     = @(mu,y,pi)NDFLayers.PILayerDiff(mu(:,l_id),y(:,l_id),pi(:,l_id)); 
+                %sub_RouteLayerDiff  = @(d,P,r) NDFLayers.RouteLayerDiff(d(:,l_id),P,r(:,l_id));
+                %sub_ThetaLayerDiff  = @(derr,theta) NDFLayers.ThetaLayerDiff(derr,theta(:,l_id));
+                %sub_GradientDeri    = @(derr,in) DFLayers.GradientDeri(derr,in(:,l_id));
+                                
+                %layer.P         = Util.CellFunwConst(@NDFLayers.PILayerDiff,    l_mu,   layer.yid,  layer.pi);
+                %layer.derr      = Util.CellFunwConst(@NDFLayers.RouteLayerDiff, l_d,    layer.P,    layer.route);
+                %layer.prev_derr = Util.CellFunwConst(@NDFLayers.ThetaLayerDiff, layer.derr, layer.theta);
+                
+                layer.P         = Util.CellFunwConst(@NDFLayers.PILayerDiff,    layer.mu,   layer.yid,  layer.pi);
+                layer.derr      = Util.CellFunwConst(@NDFLayers.RouteLayerDiff, layer.d,    layer.P,    layer.route);
+                layer.prev_derr = Util.CellFunwConst(@NDFLayers.ThetaLayerDiff, layer.derr, layer.theta);
+                
                 prev_derr_merged = NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);             
-                layer.grad =  cellfun(@NDFLayers.GradientDeri, layer.derr, layer.in,'UniformOutput',0);     
+                
+                layer.grad      = Util.CellFunwConst(@NDFLayers.GradientDeri, layer.derr, layer.in);
+                %layer.grad      = Util.CellFunwConst(@NDFLayers.GradientDeri, layer.derr, l_in);
+                
             else
+                %if(sum(gt_y ==  inf) ~= 0)
                 %embedding loss
                 layer.p_norm  = mean(layer.out,2);
                 for yid = 1:length(layer.label_list)              
                     layer.P    =  cellfun(@(mu,pi) NDFLayers.PILayerDiff(mu, yid*ones(1,size(layer.out,2)) ,pi),                    layer.mu  ,                 layer.pi      ,'UniformOutput',0);
-                    layer.derr =  cellfun(@(d,P,w_r) NDFLayers.RouteLayerEmlossDiff(d,P,w_r, layer.p_norm(yid) ,layer.tree_num),    layer.d   ,     layer.P,    layer.route   ,'UniformOutput',0);
+                    layer.derr =  cellfun(@(d,P,w_r) NDFLayers.RouteLayerEmlossDiff(d,P,w_r, layer.out(yid,:) ,layer.tree_num),    layer.d   ,     layer.P,    layer.route   ,'UniformOutput',0);
                     layer.prev_derr = cellfun(@NDFLayers.ThetaLayerDiff,                                                            layer.derr,                 layer.theta   ,'UniformOutput',0);
+                    %if(isempty(layer.grad))
                     if(yid == 1)
+                        %fprintf('Warning: Update using unlabeled data without labeled ones.\n')
                         layer.grad =  cellfun(@NDFLayers.GradientDeri, layer.derr, layer.in,'UniformOutput',0);                   
                         prev_derr_merged = NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);
                     else
@@ -150,7 +176,7 @@ classdef NDFLayers < matlab.mixin.Copyable
             else
                 learn_rate = layer.learn_rate * learn_rate_w;
             end
-            
+            %should multiply layer.grad
             if(strcmp(layer.optimizer,'Adam'))
                 adam_beta1 = 0.9;
                 adam_beta2 = 0.999;
@@ -275,9 +301,9 @@ classdef NDFLayers < matlab.mixin.Copyable
             cmap = hsv;
             interval = 5;
             if(ismember(marker,'*+x.'))
-                scatter(layer.in{3}(1,:),layer.in{3}(2,:),20,  cmap(interval*layer.yid,:),marker);
+                scatter(layer.in{1}(1,:),layer.in{1}(2,:),20,  cmap(interval*layer.yid,:),marker);
             else
-                scatter(layer.in{3}(1,:),layer.in{3}(2,:),20,  cmap(interval*layer.yid,:),marker, 'filled');
+                scatter(layer.in{1}(1,:),layer.in{1}(2,:),20,  cmap(interval*layer.yid,:),marker, 'filled');
             end
             
         end
@@ -322,17 +348,18 @@ classdef NDFLayers < matlab.mixin.Copyable
         
         %% For Back propagation 
         function P = PILayerDiff(mu,out,w_pi)
-            P = mu.* w_pi(:,out);
+            P = mu.* w_pi(:,out); 
         end        
         function derr = RouteLayerDiff(d,P,w_r)    
-            P = bsxfun(@rdivide,P,sum(P,1));
+            P = bsxfun(@rdivide,P,sum(P,1)); %sum(P,1) = Pt[y|x,theta,pi] in eq 10
             A = [(w_r~=0)*P;P];
-            derr =(d.*A(3:2:end,:) - (1-d).*A(2:2:end,:)); %derr/ds of this layer            
+            derr =(d.*A(3:2:end,:) - (1-d).*A(2:2:end,:));         
         end
-        function derr = RouteLayerEmlossDiff(d,P,w_r,f_norm,tree_num)
-            P =  2/tree_num *bsxfun(@times,P,sum(P,1))/f_norm;
+        function derr = RouteLayerEmlossDiff(d,P,w_r,out,tree_num)
+            f_norm = mean(out,2); %out = forest prediction = Pf[y~|x,theta,pi],f_norm = Pf[y~|theta,pi] 
+            P =  2/tree_num *bsxfun(@times,P,out)/f_norm;
             A = [(w_r~=0)*P;P];
-            derr =(d.*A(3:2:end,:) - (1-d).*A(2:2:end,:)); %derr/ds of this layer            
+            derr =(d.*A(3:2:end,:) - (1-d).*A(2:2:end,:));             
         end       
         function prev_derr = ThetaLayerDiff(derr,w_th)
             prev_derr = w_th * derr; %derr/dx(input) of this layer
