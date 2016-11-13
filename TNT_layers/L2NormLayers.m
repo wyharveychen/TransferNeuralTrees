@@ -1,12 +1,13 @@
-classdef L2NormLayers <handle
+classdef L2NormLayers < AbstractLayers
     properties  
-        type = 'L2_norm';
-        weights; %[pre,]
-        is_final_layer = 0;
-        
         %cache parameter of updating
         x_norm;         
         out;
+    end
+    properties(Constant)
+        %struct info
+        type = 'L2Norm';
+        is_final_layer = 0;     
     end
     
     methods
@@ -20,7 +21,7 @@ classdef L2NormLayers <handle
         function prev_derr = Backward(layer,derr) %derr: derr/ds
              prev_derr = (derr.* layer.L2NormDiff(layer.out,layer.x_norm));         
         end
-        function Update(layer,lr)               
+        function Update(layer,lambda)               
         end
         function ClearCache(layer)
             layer.x_norm = [];

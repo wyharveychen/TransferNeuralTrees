@@ -1,4 +1,4 @@
-classdef NDFLayers < matlab.mixin.Copyable
+classdef NDFLayers < AbstractLayers
     properties            
         %structure parameter
         tree_num = 20;
@@ -18,17 +18,8 @@ classdef NDFLayers < matlab.mixin.Copyable
         %for prediction
         label_list; label_map;
         p_norm;
-        
-        %for optimization
-        learn_rate;
-        learn_rate_Adam = 5e-2; 
-        learn_rate_RMSprop = 5e-3; 
-        learn_rate_adadelta = 5; 
-        learn_rate_adagrad = 5e-2; 
-        learn_rate_noadagrad = 1; 
-        ada_decay_rate = 0.9;
-            
-        optimizer;
+           
+        optim;
     end
     properties(Constant)
         %struct info
@@ -38,9 +29,8 @@ classdef NDFLayers < matlab.mixin.Copyable
         %update parameter                  
         treethres_alpha = 5;%5              
         leafprob_bias = 0.001;%0.001
-        pi_decay_rate = 1; %this is to handle the problem that how to update w_pi with batch input
-        regrate_max = 0.1;%0.1
-        regrate_lambda = 0.04;%0.04
+        %pi_decay_rate = 1; %this is to handle the problem that how to update w_pi with batch input
+
     end
     
     methods
@@ -54,13 +44,10 @@ classdef NDFLayers < matlab.mixin.Copyable
             
             layer.theta  = cellfun( @(i) (rand(layer.tree_dim_ratio*indim+1, 2^layer.tree_depth-1 ) - 0.5) ,  cell(layer.tree_num,1),'UniformOutput',0 );
             layer.route  = cellfun( @(i) NDFLayers.TreeWeightTable(layer.tree_depth)                       ,  cell(layer.tree_num,1),'UniformOutput',0 );  
-            layer.G      = cellfun( @(i) (zeros(layer.tree_dim_ratio*indim+1, 2^layer.tree_depth-1)      ) ,  cell(layer.tree_num,1),'UniformOutput',0 );
-            layer.D      = layer.G; 
-            layer.m      = layer.G;
-            
+
             layer.InitializePILayer(label_list);
-            
-            layer.SetOpimizer('RMSprop');
+
+            layer.optim = Optimizer();
         end
                 
         function InitializePILayer(layer,label_list)
@@ -93,41 +80,12 @@ classdef NDFLayers < matlab.mixin.Copyable
              out  = mean(cat(3,layer.p{:}),3);
              layer.out = out;
         end
-        %{
-        function out = ForwardOneTree(layer,in,tree_id) %in: input, out: layer output (next layer input)             
-             layer.in{tree_id} = NDFLayers.DimensionSelectionOneTree(in, layer.inidx(:,tree_id));  
-             layer.d{tree_id}  = NDFLayers.ThetaLayer(layer.in{tree_id},   layer.theta{tree_id} );  
-             layer.mu{tree_id} = NDFLayers.RouteLayer( layer.d{tree_id} ,   layer.route{tree_id});
-             layer.p{tree_id}  = NDFLayers.PILayer( layer.mu{tree_id},   layer.pi{tree_id}   );             
-             out  = mean(cat(3,layer.p{:}),3);
-             layer.out = out;
-        end
-        %}
+    
         %% For Backward
         function prev_derr_merged = Backward(layer,gt_y) %derr: derr/ds               
-            layer.grad = []; %clear cache            
-            %l_id = (gt_y ~=  inf);
             if(~isempty(gt_y))
                 %prediction loss
-                %layer.yid  =  layer.LabelMalayer.yid  =  layer.LabelMapping(gt_y(l_id));pping(gt_y(l_id));
                 layer.yid  =  layer.LabelMapping(gt_y);
-                
-                %yid_expand  = cell(layer.tree_num,1);
-                %yid_expand(:) = {layer.yid};
-                
-%                 l_in = Util.CellSubset(layer.in,l_id);
-%                 l_d  = Util.CellSubset(layer.d,l_id);
-%                 l_mu = Util.CellSubset(layer.mu,l_id);
-%                 l_p  = Util.CellSubset(layer.p,l_id);
-                
-                %sub_PILayerDiff     = @(mu,y,pi)NDFLayers.PILayerDiff(mu(:,l_id),y(:,l_id),pi(:,l_id)); 
-                %sub_RouteLayerDiff  = @(d,P,r) NDFLayers.RouteLayerDiff(d(:,l_id),P,r(:,l_id));
-                %sub_ThetaLayerDiff  = @(derr,theta) NDFLayers.ThetaLayerDiff(derr,theta(:,l_id));
-                %sub_GradientDeri    = @(derr,in) DFLayers.GradientDeri(derr,in(:,l_id));
-                                
-                %layer.P         = Util.CellFunwConst(@NDFLayers.PILayerDiff,    l_mu,   layer.yid,  layer.pi);
-                %layer.derr      = Util.CellFunwConst(@NDFLayers.RouteLayerDiff, l_d,    layer.P,    layer.route);
-                %layer.prev_derr = Util.CellFunwConst(@NDFLayers.ThetaLayerDiff, layer.derr, layer.theta);
                 
                 layer.P         = Util.CellFunwConst(@NDFLayers.PILayerDiff,    layer.mu,   layer.yid,  layer.pi);
                 layer.derr      = Util.CellFunwConst(@NDFLayers.RouteLayerDiff, layer.d,    layer.P,    layer.route);
@@ -136,85 +94,28 @@ classdef NDFLayers < matlab.mixin.Copyable
                 prev_derr_merged = NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);             
                 
                 layer.grad      = Util.CellFunwConst(@NDFLayers.GradientDeri, layer.derr, layer.in);
-                %layer.grad      = Util.CellFunwConst(@NDFLayers.GradientDeri, layer.derr, l_in);
-                
             else
-                %if(sum(gt_y ==  inf) ~= 0)
                 %embedding loss
                 layer.p_norm  = mean(layer.out,2);
+                layer.grad    = 0;
+                prev_derr_merged = 0;
                 for yid = 1:length(layer.label_list)              
                     layer.P    =  cellfun(@(mu,pi) NDFLayers.PILayerDiff(mu, yid*ones(1,size(layer.out,2)) ,pi),                    layer.mu  ,                 layer.pi      ,'UniformOutput',0);
                     layer.derr =  cellfun(@(d,P,w_r) NDFLayers.RouteLayerEmlossDiff(d,P,w_r, layer.out(yid,:) ,layer.tree_num),    layer.d   ,     layer.P,    layer.route   ,'UniformOutput',0);
                     layer.prev_derr = cellfun(@NDFLayers.ThetaLayerDiff,                                                            layer.derr,                 layer.theta   ,'UniformOutput',0);
-                    %if(isempty(layer.grad))
-                    if(yid == 1)
-                        %fprintf('Warning: Update using unlabeled data without labeled ones.\n')
-                        layer.grad =  cellfun(@NDFLayers.GradientDeri, layer.derr, layer.in,'UniformOutput',0);                   
-                        prev_derr_merged = NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);
-                    else
-                        temp_grad  =  cellfun(@NDFLayers.GradientDeri, layer.derr, layer.in,'UniformOutput',0);
-                        layer.grad =  cellfun(@plus, temp_grad, layer.grad ,'UniformOutput',0);
-                        prev_derr_merged = prev_derr_merged + NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);
-                    end
+                                        
+                    layer.grad = Util.CellFunwConst(@(g,derr,in) (g + NDFLayers.GradientDeri(derr,in) ), layer.grad, layer.derr, layer.in);
+                    prev_derr_merged = prev_derr_merged + NDFLayers.DimensionMerge(layer.prev_derr, layer.inidx, layer.indim);
                 end 
             end    
         end         
-        %{        
-        function prev_derr_merged = BackwardOneTree(layer,gt_y,tree_id)
-             layer.yid  =  layer.LabelMapping(gt_y);
-             layer.P{tree_id} = NDFLayers.PILayerDiff(layer.mu{tree_id},layer.yid ,layer.pi{tree_id});
-             layer.derr{tree_id} = NDFLayers.RouteLayerDiff(layer.d{tree_id},layer.P{tree_id} ,layer.route{tree_id});
-             layer.prev_derr{tree_id} = NDFLayers.ThetaLayerDiff(layer.derr{tree_id}, layer.theta{tree_id});
-             prev_derr_merged = NDFLayers.DimensionMergeOneTree(layer.prev_derr{tree_id},layer.inidx(:,tree_id),layer.indim);
-             layer.grad{tree_id} = NDFLayers.GradientDeri(layer.derr{tree_id}, layer.in{tree_id});
-        end
-        %}
+
         %% For Update
-        function Update(layer, learn_rate_w)
-            if( ~exist('learn_rate_w','var'))
-                learn_rate = layer.learn_rate;
-            else
-                learn_rate = layer.learn_rate * learn_rate_w;
-            end
-            %should multiply layer.grad
-            if(strcmp(layer.optimizer,'Adam'))
-                adam_beta1 = 0.9;
-                adam_beta2 = 0.999;
-                layer.G = cellfun(@(g,G) (adam_beta2*G + (1-adam_beta2)*g.^2),layer.grad ,layer.G,'UniformOutput',0 ); 
-                layer.m = cellfun(@(g,m) (adam_beta1*m + (1-adam_beta1)*m),layer.grad, layer.m,'UniformOutput',0);
-                layer.theta = cellfun(@(w_th,m,G) (w_th - learn_rate*(m/(1-adam_beta1))./(sqrt(G/(1-adam_beta2))+1e-8)), layer.theta, layer.m, layer.G,'UniformOutput',0);    
-            elseif(strcmp(layer.optimizer,'RMSprop'))
-                layer.G = cellfun(@(g,G) (layer.ada_decay_rate*G + (1-layer.ada_decay_rate)*g.^2),layer.grad ,layer.G,'UniformOutput',0 ); 
-                layer.theta = cellfun(@(w_th,grad,G) (w_th - learn_rate*grad./(sqrt(G)+1e-8)), layer.theta, layer.grad, layer.G,'UniformOutput',0);    
-            elseif(strcmp(layer.optimizer,'adadelta'))
-                layer.G = cellfun(@(g,G) (layer.ada_decay_rate*G + (1-layer.ada_decay_rate)*g.^2),layer.grad ,layer.G,'UniformOutput',0 ); 
-                    X = cellfun(@(g,G,D) (-sqrt(D+0.1)./sqrt(G+0.1).*g),layer.grad ,layer.G, layer.D,'UniformOutput',0 );
-                layer.D = cellfun(@(x,D) (layer.ada_decay_rate*D + (1-layer.ada_decay_rate)*x.^2),X ,layer.D,'UniformOutput',0 ); 
-                layer.theta = cellfun(@(w_th,x) (w_th + learn_rate.*x), layer.theta, X,'UniformOutput',0);              
-            elseif(strcmp(layer.optimizer,'adagrad'))
-                layer.G = cellfun(@(g,G) (G + g.^2),layer.grad ,layer.G,'UniformOutput',0 ); 
-                layer.theta = cellfun(@(w_th,grad,G) (w_th - learn_rate*grad./(sqrt(G)+1e-8)), layer.theta, layer.grad, layer.G,'UniformOutput',0);             
-            else
-                layer.theta = cellfun(@(w_th,grad) (w_th - learn_rate*grad), layer.theta, layer.grad,'UniformOutput',0);             
-            end
+        function Update(layer, lambda) 
+            layer.theta = layer.optim.WeightUpdate(layer.theta,layer.grad,lambda);           
             layer.pi    = cellfun(@(p,w_pi) NDFLayers.UpdatePILayer(p,w_pi,layer.yid, NDFLayers.leafprob_bias ), layer.P, layer.pi,'UniformOutput',0);
         end
-        %{
-        function UpdateOneTree(layer,tree_id)
-            if(strcmp(layer.optimizer,'adadelta'))
-                layer.G{tree_id} = layer.ada_decay_rate*layer.G{tree_id} + (1-layer.ada_decay_rate)*layer.grad{tree_id}.^2;
-                    x = -sqrt(layer.D{tree_id}+0.1)./sqrt(layer.G{tree_id}+0.1).*layer.grad{tree_id};
-                layer.D{tree_id} = layer.ada_decay_rate*layer.D{tree_id} + (1-layer.ada_decay_rate)*x.^2;
-                layer.theta = layer.theta{tree_id} + layer.learn_rate.*x;     
-            elseif(strcmp(layer.optimizer,'adagrad'))
-                layer.G{tree_id} = layer.G{tree_id} + layer.grad{tree_id}.^2;
-                layer.theta{tree_id} = layer.theta{tree_id} - layer.learn_rate*layer.grad{tree_id}./(sqrt(layer.G{tree_id} )+1e-8);          
-            else
-                layer.theta{tree_id} = layer.theta{tree_id} - layer.learn_rate*layer.grad{tree_id};          
-            end
-            layer.pi{tree_id}  =  NDFLayers.UpdatePILayer(layer.P{tree_id},layer.pi{tree_id},layer.yid, NDFLayers.leafprob_bias);
-        end
-        %}
+
         function UpdatePIOnly(layer,ground_truth,bias)
              if(~exist('bias','var'))
                  bias = NDFLayers.leafprob_bias;
@@ -235,7 +136,7 @@ classdef NDFLayers < matlab.mixin.Copyable
         
         %% For Report                
         function cost = TotalError(layer)                         
-            out_error = cellfun(@(p) NDFLayers.SparseSelect2D(p,layer.yid,1:length(layer.yid)), layer.p,'UniformOutput',0);
+            out_error = cellfun(@(p) Util.SparseSelect2D(p,layer.yid,1:length(layer.yid)), layer.p,'UniformOutput',0);
             out_error = cellfun(@(err) sum(log(err)),out_error,'UniformOutput',0);
             cost = -sum(cat(2,out_error{:}));           
         end
@@ -250,34 +151,17 @@ classdef NDFLayers < matlab.mixin.Copyable
             layer.yid  =  layer.LabelMapping(gt_y);           
             layer.p_norm = sum(layer.out,2)./ hist(layer.yid, 1:length(layer.label_list))';
             layer.p_norm = layer.p_norm/sum(layer.p_norm);
-            %layer.p_norm = mean(layer.out,2);
         end
                 
         function variance = ForestVariance(layer)
             p_all = cellfun(@(p) p(:), layer.p,'UniformOutput',0); 
-            variance = sum(reshape(var(cat(2,p_all{:}),0,2), size(layer.p{1})),1);
-            
+            variance = sum(reshape(var(cat(2,p_all{:}),0,2), size(layer.p{1})),1);            
         end
             
         function loss = EmbeddingLoss(layer)
-            %loss = -sum((layer.out).^2,1);
             loss = -sum((bsxfun(@rdivide,(layer.out).^2, layer.p_norm)),1);
         end
-        
-        function loss = EmbeddingLossPartial(layer)
-            %loss = -sum((layer.out).^2,1);
-            k = 5; %top k tree
-            tree_p = cat(3,layer.p{:});                 %combine cellfun
-            maxp_in_tree = squeeze(max(tree_p,[],1));   %highest prob in each tree
-            [~,sort_p_tid] = sort(maxp_in_tree,2,'descend'); %sort tree highest prob
-            top_p_tid = sort_p_tid(:,1:k);          %select top k tree for each index
-            data_num = size(top_p_tid,1);
-            loss = zeros(1, data_num); 
-            for id = 1:data_num 
-                loss(id) = -sum(mean(squeeze(tree_p(:,id,top_p_tid(id,1:k))),2).^2);                
-            end
-        end
-        
+                
         %% For Utility
         function yid = LabelMapping(layer,y)
              yid = cell2mat(values(layer.label_map,mat2cell(y', ones(size(y)))))';
@@ -289,24 +173,6 @@ classdef NDFLayers < matlab.mixin.Copyable
             layer.grad = [];     
         end
                                 
-        %% For Visualization
-        function ShowProjectedData(layer, gt_y, marker)
-            if(~exist('marker'))
-                marker = 'o';
-            end
-            layer.yid  =  layer.LabelMapping(gt_y);
-               
-            %scatter(x,y,marker size,color, marker type, [filled]);
-            %defalut colormap: hsv, interval: 5 
-            cmap = hsv;
-            interval = 5;
-            if(ismember(marker,'*+x.'))
-                scatter(layer.in{1}(1,:),layer.in{1}(2,:),20,  cmap(interval*layer.yid,:),marker);
-            else
-                scatter(layer.in{1}(1,:),layer.in{1}(2,:),20,  cmap(interval*layer.yid,:),marker, 'filled');
-            end
-            
-        end
     end
     
     methods(Static)
@@ -330,11 +196,6 @@ classdef NDFLayers < matlab.mixin.Copyable
             selected_input = mat2cell(input(selected_dims(:),:), indim*ones(num,1));
             selected_input = cellfun(@(i) [i;ones(1,size(input,2))],  selected_input ,'UniformOutput',0 );
         end 
-        function selected_input = DimensionSelectionOneTree(input,selected_dims)
-            selected_input = input(selected_dims,:);
-            selected_input = [selected_input;ones(1,size(input,2))];
-        end 
-        
         function d = ThetaLayer(x,w_th)            
             route_bias = 1e-6;           
             d = min(max( NDFLayers.Sigmoid(w_th'*x,NDFLayers.treethres_alpha),route_bias),1-route_bias);
@@ -373,14 +234,7 @@ classdef NDFLayers < matlab.mixin.Copyable
                 idx = selected_dims(i);
                 prev_derr_merged(idx,:) = prev_derr_merged(idx,:)+prev_derr_all(i,:);
             end
-        end
-        function prev_derr_merged = DimensionMergeOneTree(prev_derr,selected_dims,dim)    
-            selected_dims = selected_dims(:);
-            prev_derr = prev_derr(1:end-1,:);
-            prev_derr_merged = zeros(dim,size(prev_derr,2));
-            prev_derr_merged(selected_dims,:) = prev_derr;     
-        end
-        
+        end        
         function grad = GradientDeri(derr,in) 
             grad = (in * derr') / size(in, 2);
         end
@@ -411,12 +265,7 @@ classdef NDFLayers < matlab.mixin.Copyable
             end
 			y = a*x .* (1-x);         
         end
-        
-        %% For Utility
-        function content = SparseSelect2D(data,x,y)
-            l = size(data,1);
-            content = data((y-1)*l+x);
-        end
+
  
     end
 end

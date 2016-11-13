@@ -8,6 +8,11 @@ classdef Util < handle
             end            
         end
 
+        function content = SparseSelect2D(data,x,y)
+            l = size(data,1);
+            content = data((y-1)*l+x);
+        end
+        
         function cell_output = CellFunwConst(varargin)
             func = varargin{1};
             varargin(1) = []; %delete function variable;

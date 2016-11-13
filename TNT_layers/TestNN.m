@@ -12,6 +12,7 @@ out_dim = length(unique(train_label));
 
 label_list = unique(train_label);
 
+Optimizer.Method('RMSprop');
 simple_nn = NN({BasicLayers(in_dim,100),L2NormLayers(),BasicLayers(100,out_dim),SoftmaxLayers(label_list)});
 simple_nn.Train(train_data,train_label,struct('epoch_num',50,'batch_num',4));
 predicted_label = simple_nn.Predict(test_data);

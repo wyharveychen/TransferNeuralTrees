@@ -9,7 +9,7 @@ T_dataset_s = {'AMAZON','CALTECH','WEBCAM','WEBCAM','CALTECH','AMAZON', 'WEBCAM'
 
 acc = [];
 for iter = 1
-    for d_i = 3
+    for d_i = 2
 
         S_dataset = S_dataset_s{d_i};    
         T_dataset = T_dataset_s{d_i};    
@@ -23,8 +23,6 @@ for iter = 1
         T_filename = sprintf('%s/%s_%s.mat',file_path,T_dataset,T_feature);
         T = load(T_filename,'data','label');    
 
-        T_class = unique(T.label);
-
         %fix id 
         %For convience, our experiment (including other method) is based on
         %one specific partition.
@@ -34,6 +32,7 @@ for iter = 1
          
         %random id 
         %one can use these code instead to compare randomized id
+%         T_class = unique(T.label);
 %         L_id = [];
 %         U_id = [];   
 %         for y = T_class        
@@ -53,3 +52,4 @@ for iter = 1
         acc(iter,d_i) = TNTforHDA(S,L,U);    
     end
 end
+

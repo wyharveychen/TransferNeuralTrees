@@ -20,7 +20,7 @@ function test_acc = TNTforHDA(source, labeled_target, unlabeled_target)
     source_path = NN([source_mapping,classifier]);    
     target_path = NN([target_mapping,classifier]);
  
-    
+    Optimizer.Method('RMSprop');
     %% Preprocessing
     source.data = normc(source.data);
     labeled_target.data = normc(labeled_target.data);

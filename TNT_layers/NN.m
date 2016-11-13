@@ -24,15 +24,11 @@ classdef NN < handle
             has_label        = ~isempty(train_label);
             lr_weight        = Util.Initialize(opt,'lr_weight',1);
             init_epoch       = Util.Initialize(opt,'init_epoch',1);
-            %hold_gradient    = Util.Initialize(opt,'hold_gradient',1);
-
                       
             batch_size = floor(size(train_data, 2)/ batch_num);
 
             ndf_pi_allbatch = cell(1,batch_num);            
-            if(nn.is_iteratively_update && strcmp(nn.layers{nn.layer_num}.type, 'NDF'))
-                ndf_pi_allbatch_treewise = cell(nn.layers{nn.layer_num}.tree_num,batch_num);            
-            end
+
             for epoch = init_epoch:( init_epoch + epoch_num -1)
                 batch_perm_id = reshape(randperm(size(train_data, 2), batch_num * batch_size),batch_num,batch_size);                
                 total_cost = 0;
@@ -62,7 +58,6 @@ classdef NN < handle
                         nn.layers{l_id}.Update(lr_weight);
                     end
                     
-                    %total_cost = total_cost+ nn.layers{nn.layer_num}.TotalError();
                     %% Fully update PI                   
                     if( strcmp(nn.layers{nn.layer_num}.type, 'NDF') && updatestop_layer>=nn.layer_num)
                         ndf_pi_allbatch{batch} = nn.layers{nn.layer_num}.pi;     

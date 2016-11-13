@@ -1,4 +1,4 @@
-classdef SoftmaxLayers <handle
+classdef SoftmaxLayers < AbstractLayers
     properties          
         %cache parameter of updating
         out;
@@ -24,9 +24,9 @@ classdef SoftmaxLayers <handle
         end
         function prev_derr = Backward(layer,y_gt) %derr: derr/ds
              layer.yid = layer.LabelEmbedding(y_gt);
-             prev_derr = (layer.prob - layer.yid);             
+             prev_derr = (layer.out - layer.yid);             
         end
-        function Update(layer)               
+        function Update(layer,lambda)               
         end
         
         function out = LabelEmbedding(layer,y)
