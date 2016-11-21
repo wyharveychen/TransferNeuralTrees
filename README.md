@@ -5,5 +5,5 @@ Our
 You can download the data we use in the following link:
 https://dl.dropboxusercontent.com/u/101025701/datasets.zip
 
-Extract it, and you can run Demo.m to run the experiment.
+Unzip it and put the folder /dataset under same directory of our code, and you can run Demo.m for the experiment.
 
