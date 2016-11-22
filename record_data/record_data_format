@@ -1,0 +1,9 @@
+filename: TNTforHDA_{source}to{target}_{timestamp:YYYYMMDDhhmmss}
+content struct
+  -source(S)
+  -labeled_target(L)
+  -unlabeled_target(U)
+each struct has field
+  -projected_data (data on common space)
+  -label (ground truth label)
+  -dataset (dataset name)
