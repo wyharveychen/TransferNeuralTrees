@@ -28,7 +28,7 @@ classdef NDFLayers < AbstractLayers
         
         %update parameter                  
         treethres_alpha = 5;%5              
-        leafprob_bias = 0.001;%0.001
+        leafprob_bias = 0.001;
         %pi_decay_rate = 1; %this is to handle the problem that how to update w_pi with batch input
 
     end
@@ -56,21 +56,7 @@ classdef NDFLayers < AbstractLayers
             layer.label_map  = containers.Map(layer.label_list,1:layer.outdim);
             layer.pi         = cellfun( @(i) ones(2^layer.tree_depth, layer.outdim)/layer.outdim, cell(layer.tree_num,1) ,'UniformOutput',0);               
         end
-        
-        function SetOpimizer(layer,optimizer)
-            layer.optimizer = optimizer;
-            if(strcmp(layer.optimizer,'Adam'))
-                layer.learn_rate = layer.learn_rate_Adam;
-            elseif(strcmp(layer.optimizer,'RMSprop'))
-                layer.learn_rate = layer.learn_rate_RMSprop;
-            elseif(strcmp(layer.optimizer,'adadelta'))
-                layer.learn_rate = layer.learn_rate_adadelta;
-            elseif(strcmp(layer.optimizer,'adagrad'))
-                layer.learn_rate = layer.learn_rate_adagrad;
-            else    
-                layer.learn_rate = layer.learn_rate_noadagrad;           
-            end
-        end
+   
         %% For Forwarding        
         function out = Forward(layer,in) %in: input, out: layer output (next layer input)             
              layer.in = NDFLayers.DimensionSelection(in, layer.inidx);  

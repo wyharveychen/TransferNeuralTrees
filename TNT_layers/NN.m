@@ -106,17 +106,7 @@ classdef NN < handle
             for l_id = 1:nn.layer_num
                 nn.layers{l_id}.ClearCache();
             end
-        end
-        function UpdateUnseenClass(nn,in,y)
-            nn.inputs{1} =  in;
-            nn.layers{nn.layer_num}.InitializePILayer(unique(y));
-            for l_id = 1:nn.layer_num
-                nn.inputs{l_id+1} = nn.layers{l_id}.Forward(nn.inputs{l_id});
-            end
-            %nn.layers{nn.layer_num}.Backward(y);
-                %nn.layers{nn.layer_num}.UpdatePIOnly(y);            
-            nn.layers{nn.layer_num}.UpdatePIOnly(y,1/100/length(unique(y)));                        
-        end
+        end       
         
         %% For Visualization and Record
         function ShowProjectedData(nn, ith_layer, gt_y, marker)

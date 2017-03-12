@@ -32,7 +32,7 @@ function test_acc = TNTforHDA(source, labeled_target, unlabeled_target)
     acc(1) = mean(source_path.Predict(source.data) == source.label);        
     fprintf('Source train acc = %d\n',acc(1));
     clf; hold on;
-    source_path.ShowProjectedData(length(source_mapping), source.label,'+');
+    source_path.ShowProjectedData(length(source_mapping), source.label,'+'); %each source instance is shown as + on figure
     source.projected_data = source_path.GetProjectedData(length(source_mapping));
 
 
@@ -47,7 +47,7 @@ function test_acc = TNTforHDA(source, labeled_target, unlabeled_target)
     end
     acc(2) = mean(target_path.Predict(labeled_target.data) == labeled_target.label);        
     fprintf('Target train acc = %d\n',acc(2));
-    target_path.ShowProjectedData(length(target_mapping), labeled_target.label,'o');
+    target_path.ShowProjectedData(length(target_mapping), labeled_target.label,'o'); %each labeled target instance is shown as large o on figure
     labeled_target.projected_data = target_path.GetProjectedData(length(target_mapping));
 
     %% Test unlabeled target data
@@ -55,7 +55,7 @@ function test_acc = TNTforHDA(source, labeled_target, unlabeled_target)
     fprintf('Target test acc = %d\n',acc(3));
     test_acc = acc(3);    
     
-    target_path.ShowProjectedData(length(target_mapping), unlabeled_target.label,'.');
+    target_path.ShowProjectedData(length(target_mapping), unlabeled_target.label,'.'); %each unlabeled target instance is shown as small . on figure
     unlabeled_target.projected_data = target_path.GetProjectedData(length(target_mapping));
      
     %% Record file

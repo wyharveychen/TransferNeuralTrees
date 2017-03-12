@@ -36,5 +36,7 @@ L.data = T.data(:,L_id);
 L.label = T.label(L_id);
 U.data = T.data(:,U_id);
 U.label = T.label(U_id);
-
-acc = TNTforHDA(S,L,U);    
+acc = zeros(1,5);
+for i = 1:5
+    acc(i) = TNTforHDA(S,L,U);    
+end
